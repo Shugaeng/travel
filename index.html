@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>여행 다이어리</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#17263D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --navy:#17263D;
+    --navy-light:#22385A;
+    --paper:#F6F2E9;
+    --paper-dim:#EDE7D8;
+    --gold:#C99A3C;
+    --gold-dim:#E8D2A0;
+    --teal:#3E6E6A;
+    --coral:#C1483A;
+    --ink:#2B2B28;
+    --ink-soft:#6B6558;
+    --line:#D8D0BC;
+    --radius:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    max-width:480px; margin-inline:auto;
+    min-height:100vh;
+    padding-bottom:32px;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .serif{font-family:'Fraunces',serif;}
+
+  /* Header */
+  header.app-header{
+    background:var(--navy); color:var(--paper);
+    padding:22px 20px 26px;
+    position:relative;
+  }
+  header.app-header h1{
+    font-family:'Fraunces',serif; font-weight:600; font-size:26px;
+    margin:0 0 4px; letter-spacing:0.2px;
+  }
+  header.app-header p{
+    margin:0; color:var(--gold-dim); font-size:13px; font-family:'IBM Plex Mono',monospace;
+  }
+  header.app-header::after{
+    content:""; position:absolute; left:0; right:0; bottom:-1px; height:10px;
+    background-image:radial-gradient(circle at 10px 0, transparent 9px, var(--paper) 10px);
+    background-size:20px 10px; background-repeat:repeat-x;
+  }
+
+  main{padding:18px 16px 0;}
+
+  /* Dashboard map */
+  .dashboard-map-wrap{
+    background:#fff; border:1px solid var(--line); border-radius:var(--radius);
+    overflow:hidden; margin-bottom:20px;
+    box-shadow:0 1px 3px rgba(23,38,61,0.08);
+  }
+  #dashboardMap{ height:190px; width:100%; background:var(--paper-dim); }
+  .dashboard-stats{
+    display:flex; background:var(--navy);
+  }
+  .dashboard-stats .stat{
+    flex:1; text-align:center; padding:10px 4px 11px;
+    border-right:1px solid rgba(246,242,233,0.12);
+  }
+  .dashboard-stats .stat:last-child{border-right:none;}
+  .dashboard-stats .num{
+    display:block; font-family:'IBM Plex Mono',monospace; font-size:19px; font-weight:600; color:var(--gold);
+  }
+  .dashboard-stats .lbl{ font-size:11px; color:var(--gold-dim); }
+  .map-attribution{
+    font-size:9.5px; color:var(--ink-soft); text-align:right; padding:3px 8px; background:var(--paper-dim);
+  }
+  .leaflet-popup-content{font-family:'Inter',sans-serif; font-size:13px;}
+  .leaflet-popup-content strong{font-family:'Fraunces',serif; font-size:14px; color:var(--navy);}
+
+  /* Trip list - boarding pass stub cards */
+  .trip-card{
+    background:#fff; border-radius:var(--radius); margin-bottom:16px;
+    display:flex; overflow:hidden;
+    box-shadow:0 1px 3px rgba(23,38,61,0.08);
+    border:1px solid var(--line);
+    cursor:pointer;
+  }
+  .trip-card .main{
+    flex:1; padding:16px 14px 16px 18px; min-width:0;
+  }
+  .trip-card .dest{
+    font-family:'Fraunces',serif; font-weight:600; font-size:19px; margin:0 0 2px;
+    color:var(--navy);
+  }
+  .trip-card .country{
+    font-size:12.5px; color:var(--ink-soft); margin:0 0 10px;
+  }
+  .trip-card .dates{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--ink-soft);
+  }
+  .trip-card .people{
+    margin-top:8px; font-size:12px; color:var(--teal); font-weight:600;
+  }
+  .trip-card .stub{
+    width:74px; flex-shrink:0; background:var(--navy);
+    color:var(--gold-dim); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:4px;
+    border-left:2px dashed var(--paper);
+    position:relative;
+  }
+  .trip-card .stub .d-day{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600; color:var(--gold);
+    text-align:center; line-height:1.3; padding:0 4px;
+  }
+
+  .empty-state{
+    text-align:center; padding:60px 20px; color:var(--ink-soft);
+  }
+  .empty-state .serif{font-size:18px; color:var(--navy); display:block; margin-bottom:6px;}
+
+  .fab{
+    position:fixed; right:calc(50% - 240px + 20px); bottom:24px;
+    width:56px; height:56px; border-radius:50%;
+    background:var(--gold); color:var(--navy); border:none;
+    font-size:28px; box-shadow:0 4px 12px rgba(201,154,60,0.45);
+    cursor:pointer; z-index:20;
+    display:flex; align-items:center; justify-content:center;
+  }
+  @media (max-width:520px){ .fab{ right:20px; } }
+
+  /* Trip detail */
+  #tripDetail{display:none;}
+  .detail-header{
+    background:var(--navy); color:var(--paper); padding:16px 16px 0;
+    position:sticky; top:0; z-index:10;
+  }
+  .back-btn{
+    background:none; border:none; color:var(--gold-dim); font-size:14px;
+    padding:6px 0 10px; cursor:pointer; font-family:'Inter',sans-serif; font-weight:600;
+  }
+  .detail-title{font-family:'Fraunces',serif; font-size:22px; font-weight:600; margin:0 0 2px;}
+  .detail-sub{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--gold-dim); margin:0 0 14px;}
+
+  .tabs{display:flex; gap:2px;}
+  .tab-btn{
+    flex:1; background:var(--navy-light); color:var(--paper); border:none;
+    padding:10px 4px; font-size:12.5px; font-weight:600; cursor:pointer;
+    border-radius:10px 10px 0 0; opacity:0.55;
+    font-family:'Inter',sans-serif;
+  }
+  .tab-btn.active{ background:var(--paper); color:var(--navy); opacity:1; }
+
+  .tab-panel{display:none; padding:16px;}
+  .tab-panel.active{display:block;}
+
+  /* Itinerary */
+  .day-group{margin-bottom:18px;}
+  .day-group h3{
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px; color:var(--teal);
+    margin:0 0 8px; text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .item-row{
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-bottom:8px; display:flex; gap:10px; align-items:flex-start;
+  }
+  .item-row .time{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--gold); font-weight:600; width:44px; flex-shrink:0; padding-top:1px;}
+  .item-row .body{flex:1; min-width:0;}
+  .item-row .title{font-weight:600; font-size:14.5px; margin:0 0 2px;}
+  .item-row .memo{font-size:12.5px; color:var(--ink-soft); margin:0;}
+  .item-row .del{background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer; padding:0 2px;}
+
+  /* Expenses */
+  .expense-total{
+    background:var(--navy); color:var(--paper); border-radius:12px; padding:16px;
+    margin-bottom:16px; text-align:center;
+  }
+  .expense-total .amt{font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600; color:var(--gold);}
+  .expense-total .label{font-size:12px; color:var(--gold-dim); margin-top:2px;}
+  .expense-total .budget-bar{
+    margin-top:10px; height:6px; background:rgba(255,255,255,0.15); border-radius:3px; overflow:hidden;
+  }
+  .expense-total .budget-bar div{height:100%; background:var(--gold);}
+  .expense-total .budget-label{font-size:11px; color:var(--gold-dim); margin-top:6px; font-family:'IBM Plex Mono',monospace;}
+
+  .expense-row{
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px;
+  }
+  .expense-row .cat{
+    font-size:11px; background:var(--paper-dim); color:var(--teal); padding:2px 8px; border-radius:20px;
+    font-weight:600; display:inline-block; margin-bottom:3px;
+  }
+  .expense-row .desc{font-size:14px; font-weight:500;}
+  .expense-row .amount{font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:14.5px; color:var(--navy); white-space:nowrap;}
+  .expense-row .del{background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer;}
+
+  /* Records */
+  .record-card{
+    background:#fff; border:1px solid var(--line); border-radius:12px; margin-bottom:14px; overflow:hidden;
+  }
+  .record-card img{width:100%; display:block; max-height:280px; object-fit:cover; background:var(--paper-dim);}
+  .record-card .rc-body{padding:12px 14px;}
+  .record-card .rc-date{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--teal); margin-bottom:4px;}
+  .record-card p{margin:0; font-size:14px; line-height:1.55;}
+  .record-card .del{background:none; border:none; color:var(--ink-soft); font-size:13px; cursor:pointer; float:right;}
+
+  /* Checklist */
+  .check-row{
+    background:#fff; border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px; margin-bottom:8px; display:flex; align-items:center; gap:10px;
+  }
+  .check-row input[type=checkbox]{width:19px; height:19px; accent-color:var(--teal); flex-shrink:0;}
+  .check-row span{flex:1; font-size:14.5px;}
+  .check-row.done span{ text-decoration:line-through; color:var(--ink-soft); }
+  .check-row .del{background:none; border:none; color:var(--ink-soft); font-size:16px; cursor:pointer;}
+
+  .add-inline{
+    display:flex; gap:8px; margin-top:12px;
+  }
+  .add-inline input, .add-inline select{
+    border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-size:14px;
+    font-family:'Inter',sans-serif; background:#fff;
+  }
+  .btn-add{
+    background:var(--teal); color:#fff; border:none; border-radius:8px; padding:9px 16px;
+    font-weight:600; font-size:14px; cursor:pointer; white-space:nowrap;
+  }
+
+  /* Modal */
+  .modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(23,38,61,0.5);
+    z-index:50; align-items:flex-end; justify-content:center;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{
+    background:var(--paper); width:100%; max-width:480px; border-radius:20px 20px 0 0;
+    padding:22px 20px 26px; max-height:85vh; overflow-y:auto;
+  }
+  .modal h2{font-family:'Fraunces',serif; font-size:20px; margin:0 0 16px; color:var(--navy);}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:12.5px; font-weight:600; color:var(--ink-soft); margin-bottom:5px;}
+  .field input, .field select{
+    width:100%; border:1px solid var(--line); border-radius:9px; padding:11px 12px;
+    font-size:15px; font-family:'Inter',sans-serif; background:#fff;
+  }
+  .field-row{display:flex; gap:10px;}
+  .field-row .field{flex:1;}
+  .modal-actions{display:flex; gap:10px; margin-top:18px;}
+  .modal-actions button{
+    flex:1; padding:13px; border-radius:10px; border:none; font-weight:600; font-size:15px; cursor:pointer;
+  }
+  .btn-cancel{background:var(--paper-dim); color:var(--ink-soft);}
+  .btn-save{background:var(--navy); color:var(--paper);}
+
+  .sync-badge{
+    position:fixed; top:10px; left:50%; transform:translateX(-50%);
+    background:var(--coral); color:#fff; font-size:11px; padding:4px 12px; border-radius:20px;
+    font-family:'IBM Plex Mono',monospace; z-index:100; display:none;
+  }
+  .sync-badge.show{display:block;}
+</style>
+</head>
+<body>
+
+<div class="sync-badge" id="syncBadge">연결 대기 중...</div>
+
+<!-- ===== 여행 목록 화면 ===== -->
+<div id="tripList">
+  <header class="app-header">
+    <h1>여행 다이어리</h1>
+    <p id="headerSub">함께 떠난 여행들</p>
+  </header>
+  <main id="tripListMain">
+    <div class="dashboard-map-wrap">
+      <div id="dashboardMap"></div>
+      <div class="map-attribution">지도 데이터 © OpenStreetMap contributors</div>
+      <div class="dashboard-stats">
+        <div class="stat"><span class="num" id="statTripCount">0</span><span class="lbl">여행</span></div>
+        <div class="stat"><span class="num" id="statCountryCount">0</span><span class="lbl">방문 국가</span></div>
+      </div>
+    </div>
+    <div class="empty-state" id="emptyState">
+      <span class="serif">아직 기록된 여행이 없어요</span>
+      오른쪽 아래 + 버튼으로 첫 여행을 만들어보세요
+    </div>
+    <div id="tripCards"></div>
+  </main>
+  <button class="fab" onclick="openTripModal()">+</button>
+</div>
+
+<!-- ===== 여행 상세 화면 ===== -->
+<div id="tripDetail">
+  <div class="detail-header">
+    <button class="back-btn" onclick="closeTripDetail()">← 목록으로</button>
+    <div class="detail-title" id="detailTitle"></div>
+    <div class="detail-sub" id="detailSub"></div>
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="itinerary" onclick="switchTab('itinerary')">일정</button>
+      <button class="tab-btn" data-tab="expense" onclick="switchTab('expense')">경비</button>
+      <button class="tab-btn" data-tab="record" onclick="switchTab('record')">기록</button>
+      <button class="tab-btn" data-tab="checklist" onclick="switchTab('checklist')">체크리스트</button>
+    </div>
+  </div>
+
+  <!-- 일정 -->
+  <div class="tab-panel active" id="panel-itinerary">
+    <div id="itineraryContent"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-save" style="width:100%;" onclick="openItineraryModal()">+ 일정 추가</button>
+    </div>
+  </div>
+
+  <!-- 경비 -->
+  <div class="tab-panel" id="panel-expense">
+    <div class="expense-total">
+      <div class="amt mono" id="expenseTotalAmt">0원</div>
+      <div class="label">총 지출</div>
+      <div class="budget-bar"><div id="budgetBarFill" style="width:0%"></div></div>
+      <div class="budget-label" id="budgetLabel"></div>
+    </div>
+    <div id="expenseContent"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-save" style="width:100%;" onclick="openExpenseModal()">+ 경비 추가</button>
+    </div>
+  </div>
+
+  <!-- 기록 -->
+  <div class="tab-panel" id="panel-record">
+    <div id="recordContent"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-save" style="width:100%;" onclick="openRecordModal()">+ 기록 추가</button>
+    </div>
+  </div>
+
+  <!-- 체크리스트 -->
+  <div class="tab-panel" id="panel-checklist">
+    <div id="checklistContent"></div>
+    <div class="add-inline">
+      <input type="text" id="checklistInput" placeholder="준비물 입력..." style="flex:1;">
+      <button class="btn-add" onclick="addChecklistItem()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 여행 생성/수정 모달 ===== -->
+<div class="modal-backdrop" id="tripModalBackdrop">
+  <div class="modal">
+    <h2 id="tripModalTitle">새 여행 만들기</h2>
+    <div class="field">
+      <label>여행지 (도시)</label>
+      <input type="text" id="f_dest" placeholder="예: 도쿄">
+    </div>
+    <div class="field">
+      <label>국가</label>
+      <input type="text" id="f_country" placeholder="예: 일본">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>출발일</label>
+        <input type="date" id="f_start">
+      </div>
+      <div class="field">
+        <label>도착일(귀국)</label>
+        <input type="date" id="f_end">
+      </div>
+    </div>
+    <div class="field">
+      <label>예산 (원)</label>
+      <input type="number" id="f_budget" placeholder="예: 1500000">
+    </div>
+    <div class="field">
+      <label>참가자 (쉼표로 구분)</label>
+      <input type="text" id="f_people" placeholder="예: 슈, 깽">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeTripModal()">취소</button>
+      <button class="btn-save" onclick="saveTrip()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 일정 추가 모달 ===== -->
+<div class="modal-backdrop" id="itineraryModalBackdrop">
+  <div class="modal">
+    <h2>일정 추가</h2>
+    <div class="field">
+      <label>날짜</label>
+      <input type="date" id="i_date">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>시간</label>
+        <input type="time" id="i_time">
+      </div>
+    </div>
+    <div class="field">
+      <label>내용</label>
+      <input type="text" id="i_title" placeholder="예: 센소지 방문">
+    </div>
+    <div class="field">
+      <label>메모 (선택)</label>
+      <input type="text" id="i_memo" placeholder="예: 오전 일찍 가면 한산함">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('itineraryModalBackdrop')">취소</button>
+      <button class="btn-save" onclick="saveItinerary()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 경비 추가 모달 ===== -->
+<div class="modal-backdrop" id="expenseModalBackdrop">
+  <div class="modal">
+    <h2>경비 추가</h2>
+    <div class="field">
+      <label>카테고리</label>
+      <select id="e_cat">
+        <option value="교통">교통</option>
+        <option value="숙박">숙박</option>
+        <option value="식비">식비</option>
+        <option value="쇼핑">쇼핑</option>
+        <option value="관광/액티비티">관광/액티비티</option>
+        <option value="기타">기타</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>내용</label>
+      <input type="text" id="e_desc" placeholder="예: 나리타공항 리무진버스">
+    </div>
+    <div class="field">
+      <label>금액 (원)</label>
+      <input type="number" id="e_amount" placeholder="예: 32000">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('expenseModalBackdrop')">취소</button>
+      <button class="btn-save" onclick="saveExpense()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 기록 추가 모달 ===== -->
+<div class="modal-backdrop" id="recordModalBackdrop">
+  <div class="modal">
+    <h2>기록 추가</h2>
+    <div class="field">
+      <label>날짜</label>
+      <input type="date" id="r_date">
+    </div>
+    <div class="field">
+      <label>사진 (선택)</label>
+      <input type="file" id="r_photo" accept="image/*">
+    </div>
+    <div class="field">
+      <label>일기</label>
+      <input type="text" id="r_text" placeholder="오늘 있었던 일을 적어보세요">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('recordModalBackdrop')">취소</button>
+      <button class="btn-save" onclick="saveRecord()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- ===================== Firebase & App Logic ===================== -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, addDoc, setDoc, deleteDoc, updateDoc,
+  onSnapshot, query, orderBy, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getStorage, ref, uploadBytes, getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+/* =========================================================
+   ⚠️ 아래 firebaseConfig를 본인의 Firebase 프로젝트 값으로 교체하세요.
+   Firebase 콘솔 > 프로젝트 설정 > 일반 > 내 앱 > SDK 설정 및 구성 에서 확인 가능합니다.
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAo4U6xDRpLbmrJV7HC79n3LTK4XfLNVww",
+  authDomain: "shugaeng-travel.firebaseapp.com",
+  projectId: "shugaeng-travel",
+  storageBucket: "shugaeng-travel.firebasestorage.app",
+  messagingSenderId: "192683156742",
+  appId: "1:192683156742:web:23701175434c5c16d8aa87"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+const syncBadge = document.getElementById('syncBadge');
+function showSyncError(msg){
+  syncBadge.textContent = msg;
+  syncBadge.classList.add('show');
+}
+function hideSyncError(){ syncBadge.classList.remove('show'); }
+
+// ---------- State ----------
+let trips = [];
+let currentTripId = null;
+let currentTab = 'itinerary';
+let unsubItinerary=null, unsubExpense=null, unsubRecord=null, unsubChecklist=null;
+let dashMap = null;
+let dashMarkerLayer = null;
+
+// ---------- Dashboard map ----------
+function initDashboardMap(){
+  if(dashMap) return;
+  dashMap = L.map('dashboardMap', { zoomControl:false, attributionControl:false, scrollWheelZoom:false })
+    .setView([20, 10], 1.4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(dashMap);
+  dashMarkerLayer = L.layerGroup().addTo(dashMap);
+}
+function renderDashboardMap(){
+  initDashboardMap();
+  dashMarkerLayer.clearLayers();
+  const pins = trips.filter(t => typeof t.lat === 'number' && typeof t.lon === 'number');
+  pins.forEach(t=>{
+    const marker = L.circleMarker([t.lat, t.lon], {
+      radius:7, color:'#17263D', weight:2, fillColor:'#C99A3C', fillOpacity:0.95
+    });
+    marker.bindPopup(`<strong>${escapeHtml(t.dest)}</strong><br>${escapeHtml(t.country||'')}`);
+    marker.on('click', ()=> openTripDetail(t.id));
+    marker.addTo(dashMarkerLayer);
+  });
+  if(pins.length>0){
+    const bounds = L.latLngBounds(pins.map(t=>[t.lat,t.lon]));
+    dashMap.fitBounds(bounds.pad(0.35), { maxZoom:5 });
+  }
+  document.getElementById('statTripCount').textContent = trips.length;
+  const countries = new Set(trips.map(t=>t.country).filter(Boolean));
+  document.getElementById('statCountryCount').textContent = countries.size;
+}
+
+// 도시/국가 이름으로 좌표 찾기 (Nominatim, OpenStreetMap 무료 geocoding)
+async function geocodeLocation(dest, country){
+  try{
+    const q = encodeURIComponent(`${dest}, ${country}`);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`);
+    const data = await res.json();
+    if(data && data.length>0){
+      return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+    }
+  }catch(e){
+    console.error('geocoding failed', e);
+  }
+  return null;
+}
+
+// ---------- Trips (top-level collection) ----------
+const tripsCol = collection(db, 'trips');
+
+onSnapshot(query(tripsCol, orderBy('startDate','desc')), (snap)=>{
+  trips = snap.docs.map(d=>({id:d.id, ...d.data()}));
+  renderTripList();
+  renderDashboardMap();
+  hideSyncError();
+}, (err)=>{
+  console.error(err);
+  showSyncError('Firebase 연결 필요 (설정을 확인하세요)');
+});
+
+function fmtDate(s){
+  if(!s) return '';
+  const d = new Date(s+'T00:00:00');
+  return `${d.getMonth()+1}.${d.getDate()}`;
+}
+function fmtWon(n){
+  return (Number(n)||0).toLocaleString('ko-KR')+'원';
+}
+function dDayLabel(startDate){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = new Date(startDate+'T00:00:00');
+  const diff = Math.round((start - today)/86400000);
+  if(diff>0) return `D-${diff}`;
+  if(diff===0) return 'D-DAY';
+  return `D+${Math.abs(diff)}`;
+}
+
+function renderTripList(){
+  const wrap = document.getElementById('tripCards');
+  const empty = document.getElementById('emptyState');
+  if(trips.length===0){
+    empty.style.display='block';
+    wrap.innerHTML='';
+    return;
+  }
+  empty.style.display='none';
+  wrap.innerHTML = trips.map(t=>`
+    <div class="trip-card" onclick="openTripDetail('${t.id}')">
+      <div class="main">
+        <p class="dest serif">${escapeHtml(t.dest||'제목 없음')}</p>
+        <p class="country">${escapeHtml(t.country||'')}</p>
+        <div class="dates mono">${fmtDate(t.startDate)} — ${fmtDate(t.endDate)}</div>
+        ${t.people ? `<div class="people">👥 ${escapeHtml(t.people)}</div>` : ''}
+      </div>
+      <div class="stub">
+        <div class="d-day">${dDayLabel(t.startDate)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------- Trip modal ----------
+window.openTripModal = function(){
+  document.getElementById('f_dest').value='';
+  document.getElementById('f_country').value='';
+  document.getElementById('f_start').value='';
+  document.getElementById('f_end').value='';
+  document.getElementById('f_budget').value='';
+  document.getElementById('f_people').value='';
+  document.getElementById('tripModalBackdrop').classList.add('show');
+}
+window.closeTripModal = function(){
+  document.getElementById('tripModalBackdrop').classList.remove('show');
+}
+window.saveTrip = async function(){
+  const dest = document.getElementById('f_dest').value.trim();
+  const country = document.getElementById('f_country').value.trim();
+  const startDate = document.getElementById('f_start').value;
+  const endDate = document.getElementById('f_end').value;
+  const budget = document.getElementById('f_budget').value;
+  const people = document.getElementById('f_people').value.trim();
+  if(!dest || !startDate){ alert('여행지와 출발일은 필수입니다'); return; }
+
+  const saveBtn = document.querySelector('#tripModalBackdrop .btn-save');
+  const originalLabel = saveBtn.textContent;
+  saveBtn.textContent = '위치 찾는 중...';
+  saveBtn.disabled = true;
+
+  const coords = await geocodeLocation(dest, country);
+
+  try{
+    await addDoc(tripsCol, {
+      dest, country, startDate, endDate, budget: Number(budget)||0, people,
+      lat: coords ? coords.lat : null,
+      lon: coords ? coords.lon : null,
+      createdAt: serverTimestamp()
+    });
+    closeTripModal();
+  }catch(e){
+    console.error(e);
+    alert('저장 실패: Firebase 설정을 확인해주세요');
+  }finally{
+    saveBtn.textContent = originalLabel;
+    saveBtn.disabled = false;
+  }
+}
+
+// ---------- Trip detail navigation ----------
+window.openTripDetail = function(tripId){
+  currentTripId = tripId;
+  const t = trips.find(x=>x.id===tripId);
+  if(!t) return;
+  document.getElementById('detailTitle').textContent = t.dest;
+  document.getElementById('detailSub').textContent = `${t.country||''} · ${fmtDate(t.startDate)} — ${fmtDate(t.endDate)}`;
+  document.getElementById('tripList').style.display='none';
+  document.getElementById('tripDetail').style.display='block';
+  switchTab('itinerary');
+  attachSubListeners(tripId, t);
+}
+window.closeTripDetail = function(){
+  document.getElementById('tripDetail').style.display='none';
+  document.getElementById('tripList').style.display='block';
+  [unsubItinerary,unsubExpense,unsubRecord,unsubChecklist].forEach(u=>u && u());
+  currentTripId=null;
+  if(dashMap) setTimeout(()=>dashMap.invalidateSize(), 50);
+}
+window.switchTab = function(tab){
+  currentTab=tab;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+tab));
+}
+
+function attachSubListeners(tripId, tripData){
+  [unsubItinerary,unsubExpense,unsubRecord,unsubChecklist].forEach(u=>u && u());
+
+  const itinCol = collection(db,'trips',tripId,'itinerary');
+  unsubItinerary = onSnapshot(query(itinCol, orderBy('date'), orderBy('time')), snap=>{
+    renderItinerary(snap.docs.map(d=>({id:d.id,...d.data()})));
+  }, ()=>showSyncError('Firebase 연결 필요'));
+
+  const expCol = collection(db,'trips',tripId,'expenses');
+  unsubExpense = onSnapshot(query(expCol, orderBy('createdAt','desc')), snap=>{
+    renderExpenses(snap.docs.map(d=>({id:d.id,...d.data()})), tripData.budget||0);
+  }, ()=>showSyncError('Firebase 연결 필요'));
+
+  const recCol = collection(db,'trips',tripId,'records');
+  unsubRecord = onSnapshot(query(recCol, orderBy('date','desc')), snap=>{
+    renderRecords(snap.docs.map(d=>({id:d.id,...d.data()})));
+  }, ()=>showSyncError('Firebase 연결 필요'));
+
+  const chkCol = collection(db,'trips',tripId,'checklist');
+  unsubChecklist = onSnapshot(query(chkCol, orderBy('createdAt')), snap=>{
+    renderChecklist(snap.docs.map(d=>({id:d.id,...d.data()})));
+  }, ()=>showSyncError('Firebase 연결 필요'));
+}
+
+// ---------- Itinerary ----------
+function renderItinerary(items){
+  const wrap = document.getElementById('itineraryContent');
+  if(items.length===0){ wrap.innerHTML = '<div class="empty-state" style="padding:30px 10px;">아직 일정이 없어요</div>'; return; }
+  const byDate = {};
+  items.forEach(it=>{ (byDate[it.date] ||= []).push(it); });
+  wrap.innerHTML = Object.keys(byDate).sort().map(date=>`
+    <div class="day-group">
+      <h3>${date}</h3>
+      ${byDate[date].map(it=>`
+        <div class="item-row">
+          <div class="time mono">${it.time||''}</div>
+          <div class="body">
+            <p class="title">${escapeHtml(it.title)}</p>
+            ${it.memo ? `<p class="memo">${escapeHtml(it.memo)}</p>` : ''}
+          </div>
+          <button class="del" onclick="deleteItinerary('${it.id}')">✕</button>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+window.openItineraryModal = function(){
+  document.getElementById('i_date').value='';
+  document.getElementById('i_time').value='';
+  document.getElementById('i_title').value='';
+  document.getElementById('i_memo').value='';
+  document.getElementById('itineraryModalBackdrop').classList.add('show');
+}
+window.saveItinerary = async function(){
+  const date = document.getElementById('i_date').value;
+  const time = document.getElementById('i_time').value;
+  const title = document.getElementById('i_title').value.trim();
+  const memo = document.getElementById('i_memo').value.trim();
+  if(!date || !title){ alert('날짜와 내용은 필수입니다'); return; }
+  await addDoc(collection(db,'trips',currentTripId,'itinerary'), {date, time, title, memo, createdAt: serverTimestamp()});
+  closeModal('itineraryModalBackdrop');
+}
+window.deleteItinerary = async function(id){
+  await deleteDoc(doc(db,'trips',currentTripId,'itinerary',id));
+}
+
+// ---------- Expenses ----------
+function renderExpenses(items, budget){
+  const total = items.reduce((s,i)=>s+(Number(i.amount)||0),0);
+  document.getElementById('expenseTotalAmt').textContent = fmtWon(total);
+  const pct = budget>0 ? Math.min(100, Math.round(total/budget*100)) : 0;
+  document.getElementById('budgetBarFill').style.width = pct+'%';
+  document.getElementById('budgetLabel').textContent = budget>0
+    ? `예산 ${fmtWon(budget)} 중 ${pct}% 사용`
+    : '예산이 설정되지 않았어요';
+
+  const wrap = document.getElementById('expenseContent');
+  if(items.length===0){ wrap.innerHTML = '<div class="empty-state" style="padding:30px 10px;">아직 기록된 경비가 없어요</div>'; return; }
+  wrap.innerHTML = items.map(e=>`
+    <div class="expense-row">
+      <div>
+        <span class="cat">${escapeHtml(e.category||'기타')}</span>
+        <div class="desc">${escapeHtml(e.desc)}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span class="amount mono">${fmtWon(e.amount)}</span>
+        <button class="del" onclick="deleteExpense('${e.id}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+window.openExpenseModal = function(){
+  document.getElementById('e_desc').value='';
+  document.getElementById('e_amount').value='';
+  document.getElementById('expenseModalBackdrop').classList.add('show');
+}
+window.saveExpense = async function(){
+  const category = document.getElementById('e_cat').value;
+  const desc = document.getElementById('e_desc').value.trim();
+  const amount = Number(document.getElementById('e_amount').value)||0;
+  if(!desc || amount<=0){ alert('내용과 금액을 입력해주세요'); return; }
+  await addDoc(collection(db,'trips',currentTripId,'expenses'), {category, desc, amount, createdAt: serverTimestamp()});
+  closeModal('expenseModalBackdrop');
+}
+window.deleteExpense = async function(id){
+  await deleteDoc(doc(db,'trips',currentTripId,'expenses',id));
+}
+
+// ---------- Records ----------
+function renderRecords(items){
+  const wrap = document.getElementById('recordContent');
+  if(items.length===0){ wrap.innerHTML = '<div class="empty-state" style="padding:30px 10px;">아직 기록이 없어요</div>'; return; }
+  wrap.innerHTML = items.map(r=>`
+    <div class="record-card">
+      ${r.photoUrl ? `<img src="${r.photoUrl}" alt="">` : ''}
+      <div class="rc-body">
+        <button class="del" onclick="deleteRecord('${r.id}')">삭제</button>
+        <div class="rc-date mono">${r.date||''}</div>
+        <p>${escapeHtml(r.text||'')}</p>
+      </div>
+    </div>
+  `).join('');
+}
+window.openRecordModal = function(){
+  document.getElementById('r_date').value='';
+  document.getElementById('r_photo').value='';
+  document.getElementById('r_text').value='';
+  document.getElementById('recordModalBackdrop').classList.add('show');
+}
+window.saveRecord = async function(){
+  const date = document.getElementById('r_date').value;
+  const text = document.getElementById('r_text').value.trim();
+  const fileInput = document.getElementById('r_photo');
+  if(!date || (!text && fileInput.files.length===0)){ alert('날짜와 사진 또는 글 중 하나는 입력해주세요'); return; }
+  let photoUrl = '';
+  try{
+    if(fileInput.files.length>0){
+      const file = fileInput.files[0];
+      const path = `trips/${currentTripId}/records/${Date.now()}_${file.name}`;
+      const sref = ref(storage, path);
+      await uploadBytes(sref, file);
+      photoUrl = await getDownloadURL(sref);
+    }
+    await addDoc(collection(db,'trips',currentTripId,'records'), {date, text, photoUrl, createdAt: serverTimestamp()});
+    closeModal('recordModalBackdrop');
+  }catch(e){
+    console.error(e);
+    alert('저장 실패: Firebase Storage 설정을 확인해주세요');
+  }
+}
+window.deleteRecord = async function(id){
+  await deleteDoc(doc(db,'trips',currentTripId,'records',id));
+}
+
+// ---------- Checklist ----------
+function renderChecklist(items){
+  const wrap = document.getElementById('checklistContent');
+  if(items.length===0){ wrap.innerHTML = '<div class="empty-state" style="padding:20px 10px;">준비물을 추가해보세요</div>'; return; }
+  wrap.innerHTML = items.map(c=>`
+    <div class="check-row ${c.done?'done':''}">
+      <input type="checkbox" ${c.done?'checked':''} onchange="toggleChecklist('${c.id}', this.checked)">
+      <span>${escapeHtml(c.text)}</span>
+      <button class="del" onclick="deleteChecklist('${c.id}')">✕</button>
+    </div>
+  `).join('');
+}
+window.addChecklistItem = async function(){
+  const input = document.getElementById('checklistInput');
+  const text = input.value.trim();
+  if(!text) return;
+  await addDoc(collection(db,'trips',currentTripId,'checklist'), {text, done:false, createdAt: serverTimestamp()});
+  input.value='';
+}
+window.toggleChecklist = async function(id, done){
+  await updateDoc(doc(db,'trips',currentTripId,'checklist',id), {done});
+}
+window.deleteChecklist = async function(id){
+  await deleteDoc(doc(db,'trips',currentTripId,'checklist',id));
+}
+
+// ---------- Modal helpers ----------
+window.closeModal = function(id){
+  document.getElementById(id).classList.remove('show');
+}
+document.querySelectorAll('.modal-backdrop').forEach(bd=>{
+  bd.addEventListener('click', (e)=>{ if(e.target===bd) bd.classList.remove('show'); });
+});
+
+</script>
+</body>
+</html>
